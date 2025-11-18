@@ -1,0 +1,5 @@
+{
+  "name": "AI Flipbook Factory",
+  "description": "An AI-powered application to create downloadable flipbooks from your documents, images, and links. Features a 'Papers Factory' to automatically generate answers and explanations for question papers, complete with a creative cover.",
+  "requestFramePermissions": []
+}
