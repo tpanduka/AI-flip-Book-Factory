@@ -1,14 +1,6 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { QAPageContent, ExplanationStyle, CoverTheme } from "../types";
-
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  // In a real app, you'd handle this more gracefully.
-  // The environment is expected to have this set.
-  console.error("API_KEY environment variable not set.");
-}
-const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
 // Helper to convert File to base64
 const fileToGenerativePart = async (file: File) => {
@@ -23,27 +15,52 @@ const fileToGenerativePart = async (file: File) => {
 };
 
 export async function generateCoverImage(basePrompt: string, theme: CoverTheme): Promise<string> {
-    const fullPrompt = `A book cover with a ${theme} theme. The design should be vibrant, creative, and related to academic and technological topics. Title: "${basePrompt}"`;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    
+    const fullPrompt = `A book cover with a ${theme} theme. The design should be vibrant, creative, and related to academic and technological topics. Title: "${basePrompt}". Author: "ICT Cafe".`;
     try {
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt: fullPrompt,
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: fullPrompt }] },
             config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/jpeg',
-                aspectRatio: '3:4',
+                responseModalities: [Modality.IMAGE],
             },
         });
 
-        if (response.generatedImages && response.generatedImages.length > 0) {
-            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-            return `data:image/jpeg;base64,${base64ImageBytes}`;
+        const part = response.candidates?.[0]?.content?.parts?.[0];
+        if (part?.inlineData?.data) {
+             return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
         }
         throw new Error("No image was generated.");
     } catch (error) {
         console.error("Error generating cover image:", error);
-        // Return a placeholder image on error
         return "https://picsum.photos/600/800?grayscale";
+    }
+}
+
+export async function generateIllustration(prompt: string): Promise<string> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const cleanPrompt = prompt.length > 200 ? prompt.substring(0, 200) : prompt;
+    const fullPrompt = `Create a simple, clean, educational vector illustration for: ${cleanPrompt}. Use a white background. Do not include text.`;
+    
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts: [{ text: fullPrompt }] },
+            config: {
+                responseModalities: [Modality.IMAGE],
+            },
+        });
+
+        const part = response.candidates?.[0]?.content?.parts?.[0];
+        if (part?.inlineData?.data) {
+             return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+        throw new Error("No illustration data found in response");
+    } catch (error) {
+        console.error("Error generating illustration:", error);
+        // Fallback to placeholder or throw
+        throw error;
     }
 }
 
@@ -60,20 +77,17 @@ const paperAnalysisSchema = {
         items: {
           type: Type.OBJECT,
           properties: {
-            question: {
-              type: Type.STRING,
-              description: "The full text of the question, including any sub-parts.",
-            },
-            answer: {
-              type: Type.STRING,
-              description: "A correct and concise answer to the question.",
-            },
-            explanation: {
-              type: Type.STRING,
-              description: "A detailed explanation of how to arrive at the correct answer. The style of this explanation should be appropriate for the user's request. Use markdown for formatting if needed.",
-            },
+            question: { type: Type.STRING },
+            answer: { type: Type.STRING },
+            explanation: { type: Type.STRING },
+            question_sinhala: { type: Type.STRING, description: "Sinhala translation of the question" },
+            answer_sinhala: { type: Type.STRING, description: "Sinhala translation of the answer" },
+            explanation_sinhala: { type: Type.STRING, description: "Sinhala translation of the explanation" },
+            question_tamil: { type: Type.STRING, description: "Tamil translation of the question" },
+            answer_tamil: { type: Type.STRING, description: "Tamil translation of the answer" },
+            explanation_tamil: { type: Type.STRING, description: "Tamil translation of the explanation" },
           },
-          required: ["question", "answer", "explanation"],
+          required: ["question", "answer", "explanation", "question_sinhala", "answer_sinhala", "explanation_sinhala", "question_tamil", "answer_tamil", "explanation_tamil"],
         },
       },
     },
@@ -87,8 +101,9 @@ interface PaperAnalysisResult {
 
 
 export async function analyzePaper(paperFile: File, explanationStyle: ExplanationStyle): Promise<PaperAnalysisResult> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
     const imagePart = await fileToGenerativePart(paperFile);
-    const prompt = `Analyze this question paper. Create a title based on its subject. For each question, extract it, provide the correct answer, and then give a ${explanationStyle} explanation. Adhere strictly to the JSON schema.`;
+    const prompt = `Analyze this question paper. Create a title based on its subject. For each question, extract it, provide the correct answer, and then give a ${explanationStyle} explanation. Provide the Question, Answer, and Explanation in English, Sinhala, and Tamil. Adhere strictly to the JSON schema.`;
 
     try {
         const response = await ai.models.generateContent({
@@ -126,6 +141,7 @@ export async function generateVideoFromImage(
         mimeType: imageFile.type,
     };
 
+    // Always create a new instance for Veo to ensure latest key usage
     const veoAi = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
     onProgress('Sending request to Veo model...');
@@ -148,7 +164,7 @@ export async function generateVideoFromImage(
         try {
             operation = await veoAi.operations.getVideosOperation({ operation: operation });
         } catch (error: any) {
-            if (error.message?.includes('Requested entity was not found.')) {
+             if (error.message?.includes('Requested entity was not found.')) {
                 throw new Error('API key validation failed. Please select a valid API key and try again.');
             }
             throw error;
@@ -167,4 +183,53 @@ export async function generateVideoFromImage(
     }
     const videoBlob = await response.blob();
     return URL.createObjectURL(videoBlob);
+}
+
+const creativeBookSchema = {
+    type: Type.OBJECT,
+    properties: {
+        title: { type: Type.STRING, description: "A creative title for the book." },
+        pages: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING, description: "Title of the page/chapter." },
+                    content: { type: Type.STRING, description: "The educational or story content for this page. About 150-200 words." },
+                    imagePrompt: { type: Type.STRING, description: "A detailed prompt to generate an illustration for this page." }
+                },
+                required: ["title", "content", "imagePrompt"]
+            }
+        }
+    },
+    required: ["title", "pages"]
+};
+
+export interface CreativeBookResult {
+    title: string;
+    pages: { title: string; content: string; imagePrompt: string }[];
+}
+
+export async function generateCreativeBook(topic: string, audience: string, style: string): Promise<CreativeBookResult> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const prompt = `Create a mini flipbook about "${topic}" for an audience of "${audience}" in the style of "${style}". 
+    Generate 5 interesting pages. Each page should have a title, engaging content, and a prompt for an illustration.
+    Return valid JSON.`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: creativeBookSchema,
+            }
+        });
+
+        const jsonString = response.text;
+        return JSON.parse(jsonString) as CreativeBookResult;
+    } catch (error) {
+        console.error("Error generating creative book:", error);
+        throw new Error("Failed to generate the book. Please try a different topic.");
+    }
 }
