@@ -181,7 +181,7 @@ const VideoOptionsModal: React.FC<VideoOptionsModalProps> = ({ videoFile, videoA
                             <option value="9:16">9:16 (Portrait)</option>
                         </select>
                          <p className="text-xs text-slate-400 mt-2">
-                            Note: Video generation can take several minutes. Please be patient. For billing information, see <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-400">here</a>.
+                            Note: Video generation can take several minutes and requires a key from a paid GCP project. See <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-400">billing info</a>.
                          </p>
                     </div>
                 </div>
@@ -249,7 +249,6 @@ const App: React.FC = () => {
   const [showVideoOptionsModal, setShowVideoOptionsModal] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
-
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -376,11 +375,6 @@ const App: React.FC = () => {
     setGeneratedVideoUrl(null);
 
     try {
-        const hasKey = await (window as any).aistudio.hasSelectedApiKey();
-        if (!hasKey) {
-            await (window as any).aistudio.openSelectKey();
-        }
-
         const videoUrl = await generateVideoFromImage(
             videoFile,
             videoAspectRatio,
@@ -390,11 +384,7 @@ const App: React.FC = () => {
         setView('videoPlayer');
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-        if (errorMessage.includes('API key')) {
-             setError(`${errorMessage} Please try again.`);
-        } else {
-            setError(errorMessage);
-        }
+        setError(errorMessage);
         setView('home');
     } finally {
         setLoadingMessage('');

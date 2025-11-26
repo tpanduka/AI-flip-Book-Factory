@@ -2,6 +2,15 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { QAPageContent, ExplanationStyle, CoverTheme } from "../types";
 
+// Helper to get the client with the environment API key
+const getClient = () => {
+  if (!process.env.API_KEY) {
+    throw new Error("API_KEY environment variable not set");
+  }
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+};
+
+
 // Helper to convert File to base64
 const fileToGenerativePart = async (file: File) => {
   const base64EncodedDataPromise = new Promise<string>((resolve) => {
@@ -15,7 +24,7 @@ const fileToGenerativePart = async (file: File) => {
 };
 
 export async function generateCoverImage(basePrompt: string, theme: CoverTheme): Promise<string> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = getClient();
     
     const fullPrompt = `A book cover with a ${theme} theme. The design should be vibrant, creative, and related to academic and technological topics. Title: "${basePrompt}". Author: "ICT Cafe".`;
     try {
@@ -39,7 +48,7 @@ export async function generateCoverImage(basePrompt: string, theme: CoverTheme):
 }
 
 export async function generateIllustration(prompt: string): Promise<string> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = getClient();
     const cleanPrompt = prompt.length > 200 ? prompt.substring(0, 200) : prompt;
     const fullPrompt = `Create a simple, clean, educational vector illustration for: ${cleanPrompt}. Use a white background. Do not include text.`;
     
@@ -101,7 +110,7 @@ interface PaperAnalysisResult {
 
 
 export async function analyzePaper(paperFile: File, explanationStyle: ExplanationStyle): Promise<PaperAnalysisResult> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = getClient();
     const imagePart = await fileToGenerativePart(paperFile);
     const prompt = `Analyze this question paper. Create a title based on its subject. For each question, extract it, provide the correct answer, and then give a ${explanationStyle} explanation. Provide the Question, Answer, and Explanation in English, Sinhala, and Tamil. Adhere strictly to the JSON schema.`;
 
@@ -135,17 +144,15 @@ export async function generateVideoFromImage(
     aspectRatio: '16:9' | '9:16',
     onProgress: (message: string) => void
 ): Promise<string> {
+    const ai = getClient();
     onProgress('Preparing image for animation...');
     const imagePart = {
         imageBytes: (await fileToGenerativePart(imageFile)).inlineData.data,
         mimeType: imageFile.type,
     };
 
-    // Always create a new instance for Veo to ensure latest key usage
-    const veoAi = new GoogleGenAI({ apiKey: process.env.API_KEY! });
-
     onProgress('Sending request to Veo model...');
-    let operation = await veoAi.models.generateVideos({
+    let operation = await ai.models.generateVideos({
         model: 'veo-3.1-fast-generate-preview',
         image: imagePart,
         config: {
@@ -162,7 +169,7 @@ export async function generateVideoFromImage(
         onProgress(`Video generation in progress... (Checking status ${pollCount})`);
         await new Promise(resolve => setTimeout(resolve, 10000)); // Poll every 10s
         try {
-            operation = await veoAi.operations.getVideosOperation({ operation: operation });
+            operation = await ai.operations.getVideosOperation({ operation: operation });
         } catch (error: any) {
              if (error.message?.includes('Requested entity was not found.')) {
                 throw new Error('API key validation failed. Please select a valid API key and try again.');
@@ -177,7 +184,8 @@ export async function generateVideoFromImage(
         throw new Error('Video generation failed to produce a download link.');
     }
     
-    const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+    const apiKey = process.env.API_KEY;
+    const response = await fetch(`${downloadLink}&key=${apiKey}`);
     if (!response.ok) {
         throw new Error(`Failed to download the generated video (status: ${response.status})`);
     }
@@ -211,7 +219,7 @@ export interface CreativeBookResult {
 }
 
 export async function generateCreativeBook(topic: string, audience: string, style: string): Promise<CreativeBookResult> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+    const ai = getClient();
     const prompt = `Create a mini flipbook about "${topic}" for an audience of "${audience}" in the style of "${style}". 
     Generate 5 interesting pages. Each page should have a title, engaging content, and a prompt for an illustration.
     Return valid JSON.`;

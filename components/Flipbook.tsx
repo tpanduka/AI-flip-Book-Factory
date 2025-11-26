@@ -61,17 +61,30 @@ const QAPageComponent: React.FC<{
     content: QAPageContent, 
     pageNumber: number, 
     questionNumber: number, 
-    onGenerateIllustration: () => void
+    onGenerateIllustration: () => Promise<void>
 }> = ({ content, pageNumber, questionNumber, onGenerateIllustration }) => {
     const [lang, setLang] = useState<'en' | 'si' | 'ta'>('en');
-    const [hasRequested, setHasRequested] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const hasBeenRequested = useRef(false);
+
+    const doGenerate = useCallback(async () => {
+        if (isGenerating) return;
+        setIsGenerating(true);
+        try {
+            await onGenerateIllustration();
+        } catch (error) {
+            // error is handled by parent, here we just stop loading state
+        } finally {
+            setIsGenerating(false);
+        }
+    }, [onGenerateIllustration, isGenerating]);
 
     useEffect(() => {
-        if (!content.illustrationUrl && !hasRequested) {
-            setHasRequested(true);
-            onGenerateIllustration();
+        if (!content.illustrationUrl && !hasBeenRequested.current) {
+            hasBeenRequested.current = true;
+            doGenerate();
         }
-    }, [content.illustrationUrl, hasRequested, onGenerateIllustration]);
+    }, [content.illustrationUrl, doGenerate]);
 
     const getLocalizedContent = () => {
         const suffix = lang === 'en' ? '' : lang === 'si' ? '_sinhala' : '_tamil';
@@ -116,10 +129,18 @@ const QAPageComponent: React.FC<{
                     <div className="w-full aspect-square bg-white p-2 rounded border border-slate-200 shadow-sm flex items-center justify-center overflow-hidden">
                         {content.illustrationUrl ? (
                             <img src={content.illustrationUrl} alt="Answer Illustration" className="w-full h-full object-contain" />
-                        ) : (
+                        ) : isGenerating ? (
                             <div className="flex flex-col items-center justify-center text-slate-300">
                                 <Icon icon="sparkles" className="w-6 h-6 mb-1 animate-pulse text-purple-300" />
                                 <span className="text-[10px]">Drawing...</span>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                                <Icon icon="image" className="w-6 h-6 mb-2 text-slate-300"/>
+                                <span className="text-xs mb-2">Illustration not available.</span>
+                                <button onClick={doGenerate} className="text-xs bg-teal-600 text-white px-3 py-1 rounded-md hover:bg-teal-500 transition-colors font-semibold">
+                                    Retry
+                                </button>
                             </div>
                         )}
                     </div>
@@ -142,16 +163,29 @@ const StoryPageComponent: React.FC<{
     content: string,
     illustrationUrl?: string,
     pageNumber: number,
-    onGenerateIllustration: () => void
+    onGenerateIllustration: () => Promise<void>
 }> = ({ title, content, illustrationUrl, pageNumber, onGenerateIllustration }) => {
-    const [hasRequested, setHasRequested] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const hasBeenRequested = useRef(false);
+
+    const doGenerate = useCallback(async () => {
+        if (isGenerating) return;
+        setIsGenerating(true);
+        try {
+            await onGenerateIllustration();
+        } catch (error) {
+            // handled by parent
+        } finally {
+            setIsGenerating(false);
+        }
+    }, [onGenerateIllustration, isGenerating]);
 
     useEffect(() => {
-        if (!illustrationUrl && !hasRequested) {
-            setHasRequested(true);
-            onGenerateIllustration();
+        if (!illustrationUrl && !hasBeenRequested.current) {
+            hasBeenRequested.current = true;
+            doGenerate();
         }
-    }, [illustrationUrl, hasRequested, onGenerateIllustration]);
+    }, [illustrationUrl, doGenerate]);
 
     return (
         <div className="w-full h-full bg-[#fdfbf7] flex flex-col p-8 text-slate-800 shadow-[inset_20px_0_20px_-20px_rgba(0,0,0,0.2)]">
@@ -164,10 +198,18 @@ const StoryPageComponent: React.FC<{
                 <div className="float-right w-[45%] ml-6 mb-4 flex flex-col items-center justify-center bg-white p-2 rounded shadow-md transform rotate-1 transition-transform hover:rotate-0 duration-300">
                      {illustrationUrl ? (
                         <img src={illustrationUrl} alt="Illustration" className="w-full rounded object-cover aspect-square" />
-                    ) : (
+                    ) : isGenerating ? (
                         <div className="w-full aspect-square flex flex-col items-center justify-center text-slate-300 bg-slate-50">
                             <Icon icon="sparkles" className="w-8 h-8 mb-2 animate-pulse text-purple-300" />
                             <span className="text-xs font-medium">Painting...</span>
+                        </div>
+                    ) : (
+                         <div className="w-full aspect-square flex flex-col items-center justify-center text-slate-400 bg-slate-50 p-2 text-center">
+                            <Icon icon="image" className="w-8 h-8 mb-2 text-slate-300" />
+                            <span className="text-xs font-medium mb-2">Couldn't paint this.</span>
+                             <button onClick={doGenerate} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-500 transition-colors font-semibold">
+                                Retry
+                            </button>
                         </div>
                     )}
                 </div>
@@ -307,6 +349,7 @@ const Flipbook: React.FC<FlipbookProps> = ({ pages, onClose, onUpdatePage }) => 
     } catch (error) {
         console.error("Failed to generate illustration", error);
         requestedIllustrations.current.delete(index); // Retry allowed on fail
+        throw error; // Re-throw to notify the child component
     }
   }, [onUpdatePage]);
 
