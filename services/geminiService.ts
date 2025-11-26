@@ -2,12 +2,20 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { QAPageContent, ExplanationStyle, CoverTheme } from "../types";
 
-// Helper to get the client with the environment API key
-const getClient = () => {
-  if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable not set");
+// Helper to get the API key from session storage
+const getApiKey = (): string => {
+  const key = sessionStorage.getItem('gemini-api-key');
+  if (!key) {
+    // This should not be reached if the UI is gated, but it's a safeguard.
+    alert("API Key not found. Please refresh the page and enter your key.");
+    throw new Error("API_KEY not found in session storage");
   }
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return key;
+}
+
+// Helper to get the client with the user's API key
+const getClient = () => {
+  return new GoogleGenAI({ apiKey: getApiKey() });
 };
 
 
@@ -184,7 +192,7 @@ export async function generateVideoFromImage(
         throw new Error('Video generation failed to produce a download link.');
     }
     
-    const apiKey = process.env.API_KEY;
+    const apiKey = getApiKey();
     const response = await fetch(`${downloadLink}&key=${apiKey}`);
     if (!response.ok) {
         throw new Error(`Failed to download the generated video (status: ${response.status})`);

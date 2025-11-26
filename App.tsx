@@ -10,6 +10,52 @@ type AppView = 'home' | 'processing' | 'flipbook' | 'videoPlayer';
 
 // --- Helper Components ---
 
+const ApiKeyModal: React.FC<{ onKeySubmit: (key: string) => void }> = ({ onKeySubmit }) => {
+  const [key, setKey] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (key.trim()) {
+      onKeySubmit(key.trim());
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900 bg-opacity-90 backdrop-blur-md flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center animate-fadeIn">
+        <Icon icon="sparkles" className="w-10 h-10 text-amber-400 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-white mb-3">Welcome!</h2>
+        <p className="text-slate-400 mb-6">
+          Please enter your Google Gemini API key to continue. This key is stored only in your browser for this session.
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="Enter your API key here"
+            className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 text-white focus:ring-teal-500 focus:border-teal-500 text-center"
+          />
+          <button
+            type="submit"
+            disabled={!key.trim()}
+            className="w-full px-6 py-3 bg-teal-600 hover:bg-teal-500 rounded-lg font-semibold transition-colors duration-300 disabled:bg-slate-600 disabled:cursor-not-allowed"
+          >
+            Save & Continue
+          </button>
+        </form>
+        <p className="text-xs text-slate-500 mt-4">
+          Don't have a key? Get one for free at{' '}
+          <a href="https://ai.google.dev/" target="_blank" rel="noopener noreferrer" className="underline hover:text-teal-400">
+            Google AI Studio
+          </a>.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+
 const Card: React.FC<{title: string, description: string, icon: React.ReactNode, children: React.ReactNode}> = ({title, description, icon, children}) => (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 flex flex-col items-center text-center transform hover:scale-105 hover:border-teal-400 transition-all duration-300 shadow-xl">
         <div className="p-4 bg-slate-700 rounded-full mb-4 shadow-inner">
@@ -227,6 +273,7 @@ const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({ videoUrl, onClose }
 // --- Main App Component ---
 
 const App: React.FC = () => {
+  const [apiKey, setApiKey] = useState<string | null>(null);
   const [view, setView] = useState<AppView>('home');
   const [pages, setPages] = useState<FlipbookPage[]>([]);
   const [loadingMessage, setLoadingMessage] = useState('');
@@ -249,6 +296,18 @@ const App: React.FC = () => {
   const [showVideoOptionsModal, setShowVideoOptionsModal] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<'16:9' | '9:16'>('16:9');
   const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedKey = sessionStorage.getItem('gemini-api-key');
+    if (storedKey) {
+      setApiKey(storedKey);
+    }
+  }, []);
+
+  const handleKeySubmit = (key: string) => {
+    sessionStorage.setItem('gemini-api-key', key);
+    setApiKey(key);
+  };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -405,6 +464,10 @@ const App: React.FC = () => {
     setShowCreativeModal(false);
     setCreativeTopic('');
   };
+
+  if (!apiKey) {
+    return <ApiKeyModal onKeySubmit={handleKeySubmit} />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 text-white font-sans p-4 md:p-8 flex flex-col">
